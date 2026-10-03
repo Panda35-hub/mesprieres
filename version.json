@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "notes": "Version de départ",
+  "sha256": {
+    "app": "5912c31cc1f91415ecca662b6cd1c37ff7dc1463fcee824684cc3d716c0925b9",
+    "style": "cf92db226ec1b086bae37da59cce679a8a5dd31eab245cb6b50d615f32a2ffc0"
+  }
+}
