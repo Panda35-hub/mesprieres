@@ -56,6 +56,7 @@ window.appBack=()=>back();
 
 const az=(a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base',numeric:true});
 const sorted=()=>[...db.cats].sort(az);
+const grpOf=(c,p)=>(c.groups||[]).find(g=>g.id===p.group);
 function catCard(c){
   const np=c.prayers.length;
   return `<div class="cat" data-c="${c.id}"><b>${esc(c.name)}</b><span class="cnt">${np} prière${np>1?'s':''} ›<small class="ph" data-c="${c.id}"></small></span></div>`;
@@ -64,7 +65,7 @@ function render(){
   galTok++;galUrls.forEach(u=>URL.revokeObjectURL(u));galUrls=[];
   const m=$('main'),fab=$('fab'),bk=$('back'),t=$('title');
   bk.style.display=view.n==='home'?'none':'block';
-  fab.style.display=(view.n==='home'||view.n==='cat'||view.n==='album')?'block':'none';
+  fab.style.display=(view.n==='home'||view.n==='cat'||view.n==='album'||view.n==='group')?'block':'none';
   if(view.n==='home'){
     t.textContent='Mes Prières';
     m.innerHTML='<input class="search" id="q" placeholder="Rechercher une prière…">'+
@@ -79,13 +80,24 @@ function render(){
     const tab=view.tab||'p';
     const tabs=`<div class="tabs"><button data-t="p" class="${tab==='p'?'on':''}">Prières</button><button data-t="g" class="${tab==='g'?'on':''}">Galerie</button></div>`;
     if(tab==='p'){
-      m.innerHTML=tabs+(c.prayers.length?c.prayers.map(p=>prayerHTML(p)).join(''):'<div class="empty">Aucune prière ici.<br>Appuyez sur + pour en ajouter une.</div>');
+      const gs=[...(c.groups||[])].sort(az),gids=new Set(gs.map(g=>g.id));
+      const rootP=c.prayers.filter(p=>!gids.has(p.group));
+      const gHTML=gs.length?'<div class="albums">'+gs.map(g=>{const n=c.prayers.filter(p=>p.group===g.id).length;return `<div class="alb grp" data-g="${g.id}"><div class="cv">📂</div><b>${esc(g.name)}</b><small>${n} prière${n>1?'s':''}</small></div>`}).join('')+'</div>'+(rootP.length?'<div class="sub">Prières sans sous-catégorie</div>':''):'';
+      m.innerHTML=tabs+gHTML+(rootP.length?rootP.map(p=>prayerHTML(p)).join(''):(gs.length?'':'<div class="empty">Aucune prière ici.<br>Appuyez sur + pour en ajouter une.<br><small>Menu ⋮ → « Nouvelle sous-catégorie » pour les ranger.</small></div>'));
+      m.querySelectorAll('.grp').forEach(e=>e.onclick=()=>go({n:'group',cid:c.id,gid:e.dataset.g}));
       bindPrayers(m,c.id);
     }else{
       m.innerHTML=tabs+'<div id="albs"></div><div id="gal" class="grid"></div>';
       loadGallery(c.id,'');
     }
     m.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{view.tab=b.dataset.t;render()});
+  }else if(view.n==='group'){
+    const c=db.cats.find(x=>x.id===view.cid),g=c&&(c.groups||[]).find(x=>x.id===view.gid);
+    if(!g){back();return}
+    t.textContent=g.name;
+    const ps=c.prayers.filter(p=>p.group===g.id);
+    m.innerHTML=ps.length?ps.map(p=>prayerHTML(p)).join(''):'<div class="empty">Aucune prière ici.<br>Appuyez sur + pour en ajouter une.</div>';
+    bindPrayers(m,c.id);
   }else if(view.n==='album'){
     const c=db.cats.find(x=>x.id===view.cid);
     const a=c&&(c.albums||[]).find(x=>x.id===view.aid);
@@ -97,7 +109,9 @@ function render(){
     const c=db.cats.find(x=>x.id===view.cid);
     const p=view.pid?c.prayers.find(x=>x.id===view.pid):{title:'',text:''};
     t.textContent=view.pid?'Modifier la prière':'Nouvelle prière';
-    m.innerHTML=`<label>Titre</label><input class="f" id="pt" value="${esc(p.title)}" placeholder="Ex. : Litanies, Neuvaine…"><label>Texte de la prière (sélectionnez des mots puis G, I ou S)</label><div class="tb"><button type="button" data-c="bold" title="Gras"><b>G</b></button><button type="button" data-c="italic" title="Italique"><i>I</i></button><button type="button" data-c="underline" title="Souligné"><u>S</u></button><button type="button" data-c="removeFormat" title="Effacer la mise en forme">✕</button></div><div class="ed" id="px" contenteditable="true"></div><div class="row"><button class="btn" id="ok">Enregistrer</button><button class="btn sec" id="no">Annuler</button></div>`;
+    const gsel=[...(c.groups||[])].sort(az);
+    const selHTML=gsel.length?`<label>Sous-catégorie</label><select class="f" id="pg"><option value="">Aucune</option>${gsel.map(g=>`<option value="${g.id}"${(p.group||view.gid)===g.id?' selected':''}>${esc(g.name)}</option>`).join('')}</select>`:'';
+    m.innerHTML=`<label>Titre</label><input class="f" id="pt" value="${esc(p.title)}" placeholder="Ex. : Litanies, Neuvaine…">${selHTML}<label>Texte de la prière (sélectionnez des mots puis G, I ou S)</label><div class="tb"><button type="button" data-c="bold" title="Gras"><b>G</b></button><button type="button" data-c="italic" title="Italique"><i>I</i></button><button type="button" data-c="underline" title="Souligné"><u>S</u></button><button type="button" data-c="removeFormat" title="Effacer la mise en forme">✕</button></div><div class="ed" id="px" contenteditable="true"></div><div class="row"><button class="btn" id="ok">Enregistrer</button><button class="btn sec" id="no">Annuler</button></div>`;
     const ed=$('px');
     ed.innerHTML=p.html?sanitizeHtml(p.html):esc(p.text).replace(/\n/g,'<br>');
     initToolbar(ed);
@@ -106,7 +120,9 @@ function render(){
       const ti=$('pt').value.trim(),{h,t}=serialize(ed),tx=t;
       if(!ti&&!tx){info('Écrivez au moins un titre ou un texte.');return}
       const html=/<[biu]>/.test(h)?h:'';
-      if(view.pid){p.title=ti||'Sans titre';p.text=tx;p.html=html}else c.prayers.push({id:uid(),title:ti||'Sans titre',text:tx,html});
+      const gv=$('pg')?$('pg').value:'';
+      if(view.pid){p.title=ti||'Sans titre';p.text=tx;p.html=html;if(gv)p.group=gv;else delete p.group}
+      else{const np={id:uid(),title:ti||'Sans titre',text:tx,html};if(gv)np.group=gv;c.prayers.push(np)}
       save();back();
     };
   }else if(view.n==='update'){
@@ -139,7 +155,7 @@ function render(){
   }
   window.scrollTo(0,0);
 }
-function prayerHTML(p,cn){return `<div class="pr" data-p="${p.id}" ${cn!==undefined?`data-c="${cn.id}"`:''}><div class="t"><span>${esc(p.title)}${cn?`<br><small>${esc(cn.name)}</small>`:''}</span><span>⌄</span></div><div class="body">${p.html||esc(p.text)}</div><div class="acts"><button class="btn sec" data-a="e">Modifier</button><button class="btn del" data-a="d">Supprimer</button></div></div>`}
+function prayerHTML(p,cn){return `<div class="pr" data-p="${p.id}" ${cn!==undefined?`data-c="${cn.id}"`:''}><div class="t"><span>${esc(p.title)}${cn?`<br><small>${esc(cn.name+(grpOf(cn,p)?' › '+grpOf(cn,p).name:''))}</small>`:''}</span><span>⌄</span></div><div class="body">${p.html||esc(p.text)}</div><div class="acts"><button class="btn sec" data-a="e">Modifier</button><button class="btn del" data-a="d">Supprimer</button></div></div>`}
 function bindPrayers(root,defaultCid){
   root.querySelectorAll('.pr').forEach(el=>{
     const cid=el.dataset.c||defaultCid,pid=el.dataset.p;
@@ -455,13 +471,26 @@ $('fab').onclick=async()=>{
       }
     }else go({n:'edit',cid:view.id});
   }else if(view.n==='album')$('fi').click();
+  else if(view.n==='group')go({n:'edit',cid:view.cid,gid:view.gid});
 };
 $('menu').onclick=async()=>{
   if(view.n==='cat'){
     const c=db.cats.find(x=>x.id===view.id);
-    const a=await choose(c.name,[{label:'Renommer la catégorie'},{label:'Supprimer la catégorie',cls:'del'}]);
-    if(a===0){const n=await ask('Nouveau nom :',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}}
-    else if(a===1&&await conf('Supprimer « '+c.name+' » avec toutes ses prières et ses photos ?')){try{await delCatPhotos(c.id)}catch(e){}db.cats=db.cats.filter(x=>x.id!==c.id);save();stack.length=0;view={n:'home'};render()}
+    const a=await choose(c.name,[{label:'Nouvelle sous-catégorie'},{label:'Renommer la catégorie'},{label:'Supprimer la catégorie',cls:'del'}]);
+    if(a===0){
+      const n=await ask('Nom de la sous-catégorie (ex. Neuvaine, Litanies) :');
+      if(n&&n.trim()){(c.groups=c.groups||[]).push({id:uid(),name:n.trim()});save();view.tab='p';render()}
+    }
+    else if(a===1){const n=await ask('Nouveau nom :',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}}
+    else if(a===2&&await conf('Supprimer « '+c.name+' » avec toutes ses prières et ses photos ?')){try{await delCatPhotos(c.id)}catch(e){}db.cats=db.cats.filter(x=>x.id!==c.id);save();stack.length=0;view={n:'home'};render()}
+  }else if(view.n==='group'){
+    const c=db.cats.find(x=>x.id===view.cid),g=(c.groups||[]).find(x=>x.id===view.gid);
+    const r=await choose(g.name,[{label:'Renommer la sous-catégorie'},{label:'Supprimer la sous-catégorie',cls:'del'}]);
+    if(r===0){const n=await ask('Nouveau nom :',g.name);if(n&&n.trim()){g.name=n.trim();save();render()}}
+    else if(r===1&&await conf('Supprimer la sous-catégorie « '+g.name+' » ? Ses prières sont conservées dans « '+c.name+' ».')){
+      c.prayers.forEach(p=>{if(p.group===g.id)delete p.group});
+      c.groups=c.groups.filter(x=>x.id!==g.id);save();back();
+    }
   }else if(view.n==='album'){
     const c=db.cats.find(x=>x.id===view.cid),a=(c.albums||[]).find(x=>x.id===view.aid);
     const r=await choose(a.name,[{label:'Renommer le dossier'},{label:'Supprimer le dossier',cls:'del'}]);
